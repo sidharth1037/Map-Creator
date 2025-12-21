@@ -344,8 +344,8 @@ def process_map_final(img_path):
         cv2.circle(vis_img, (x2, y2), 3, (0, 0, 255), -1)
         json_data.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
-    cv2.imwrite('floorplan_master_fused.jpg', vis_img)
-    with open('floorplan_master_fused.json', 'w') as f:
+    cv2.imwrite('second_floor_fused.jpg', vis_img)
+    with open('second_floor_fused.json', 'w') as f:
         json.dump(json_data, f, indent=2)
 
 process_map_final('skeleton.png')

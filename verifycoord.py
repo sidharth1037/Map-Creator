@@ -77,4 +77,4 @@ def verify_json_coordinates(json_path, output_img_path):
     print(f"Verification image saved to: {output_img_path}")
 
 # Run
-verify_json_coordinates('floorplan_aligned.json', 'verification_coords.jpg')
+verify_json_coordinates('second_floor_aligned.json', 'verification_coords.jpg')

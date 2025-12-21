@@ -67,7 +67,7 @@ def get_skeleton(img_path):
     return img, closing, final_skeleton
 
 # Run the function
-original, binary, skeleton_result = get_skeleton('first plain clean.jpg')
+original, binary, skeleton_result = get_skeleton('second plain.jpg')
 
 # Visualization
 plt.figure(figsize=(15, 5))
