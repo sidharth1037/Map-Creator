@@ -20,6 +20,7 @@ def render_timeline():
         ("Walls", "walls"),
         ("Stairs", "stairs"),
         ("Snap", "snap"),
+        ("Floor Conn", "floor_connections"),
         ("Visualize", "visualize"),
     ]
     
@@ -48,7 +49,7 @@ def render_timeline():
             else:
                 button_color = "⭕"
             
-            if st.button(f"{button_color} {step_name}", use_container_width=True, 
+            if st.button(f"{button_color} {step_name}", width='stretch', 
                         key=f"timeline_{step_key}"):
                 st.session_state.current_view = step_key
                 st.rerun()
@@ -109,7 +110,7 @@ def render_walls_view():
         else:
             st.warning("'images' folder not found")
     
-    run_walls_button = st.button("Process Walls", use_container_width=True, type="primary", key="walls_btn")
+    run_walls_button = st.button("Process Walls", width='stretch', type="primary", key="walls_btn")
     
     # Extract floor from filename if available
     floor_from_file = None
@@ -173,7 +174,7 @@ def render_stairs_view():
         else:
             st.warning("'images' folder not found")
     
-    run_stairs_button = st.button("Process Stairs", use_container_width=True, type="primary", key="stairs_btn")
+    run_stairs_button = st.button("Process Stairs", width='stretch', type="primary", key="stairs_btn")
     
     # Extract floor from filename if available
     floor_from_file = None
@@ -284,7 +285,7 @@ def render_snap_view():
             on_change=lambda: st.session_state.update({"snapped": False})
         )
     
-    snap_button = st.button("Snap Stairs to Walls", use_container_width=True, type="primary", key="snap_btn")
+    snap_button = st.button("Snap Stairs to Walls", width='stretch', type="primary", key="snap_btn")
     
     # Validate files before snapping
     if snap_button:
@@ -303,20 +304,130 @@ def render_snap_view():
     return endpoint_threshold, line_threshold, snap_button, floor_from_file
 
 
+def render_floor_connections_view():
+    """Render the floor connections view."""
+    st.header("Floor Connections")
+    
+    floor_number = st.text_input(
+        "Enter floor number",
+        value=st.session_state.get("current_floor", ""),
+        on_change=lambda: st.session_state.update({"current_floor": st.session_state.floor_input}),
+        key="floor_input"
+    )
+    
+    st.subheader("Select JSON Files")
+    
+    # Option to use automatic detection or custom files
+    use_automatic = st.checkbox(
+        "Use automatic floor detection",
+        value=True,
+        key="floor_conn_use_automatic"
+    )
+    
+    walls_json_path = None
+    stairs_json_path = None
+    
+    if use_automatic and floor_number:
+        try:
+            floor = float(floor_number)
+            walls_json_path = f"outputs/floor_{floor}_walls.json"
+            stairs_json_path = f"outputs/floor_{floor}_stairs.json"
+        except ValueError:
+            st.error("Invalid floor number")
+    else:
+        # Custom file selection
+        st.write("Select walls JSON:")
+        walls_file = st.selectbox(
+            "Walls JSON",
+            options=_get_json_files("outputs", "walls"),
+            key="floor_conn_walls_select"
+        )
+        if walls_file:
+            walls_json_path = f"outputs/{walls_file}"
+        
+        st.write("Select stairs JSON:")
+        stairs_file = st.selectbox(
+            "Stairs JSON",
+            options=_get_json_files("outputs", "stairs"),
+            key="floor_conn_stairs_select"
+        )
+        if stairs_file:
+            stairs_json_path = f"outputs/{stairs_file}"
+    
+    plot_button = st.button("Plot", width='stretch', type="secondary", key="floor_conn_plot_btn")
+    
+    st.divider()
+    st.subheader("Add Floor Connections")
+    
+    # Initialize pending connections list in session state
+    if 'floor_conn_pending' not in st.session_state:
+        st.session_state.floor_conn_pending = []
+    
+    # Form to add new connection
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        polygon_id = st.number_input(
+            "Polygon ID",
+            min_value=0,
+            step=1,
+            key="floor_conn_polygon_id"
+        )
+    
+    with col2:
+        from_floor = st.number_input(
+            "From floor",
+            format="%.1f",
+            key="floor_conn_from"
+        )
+    
+    with col3:
+        to_floor = st.number_input(
+            "To floor",
+            format="%.1f",
+            key="floor_conn_to"
+        )
+    
+    add_conn_button = st.button("Add Connection", width='stretch', type="secondary", key="add_floor_conn_btn")
+    
+    # Display pending connections
+    if st.session_state.floor_conn_pending:
+        st.subheader("Pending Connections")
+        st.write(f"Total: {len(st.session_state.floor_conn_pending)} connections to add")
+        
+        for idx, conn in enumerate(st.session_state.floor_conn_pending):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"P{conn['polygon_id']}: {conn['from_floor']} ↔ {conn['to_floor']}")
+            with col2:
+                if st.button("Remove", key=f"remove_conn_{idx}", width='content'):
+                    st.session_state.floor_conn_pending.pop(idx)
+                    st.rerun()
+    
+    save_button = st.button("Save All Connections", width='stretch', type="primary", key="save_floor_conn_btn")
+    
+    return walls_json_path, stairs_json_path, plot_button, polygon_id, from_floor, to_floor, add_conn_button, save_button
+
+
+def _get_json_files(directory, filter_type=None):
+    """Get list of JSON files in directory with optional filtering."""
+    if not os.path.exists(directory):
+        return []
+    
+    files = []
+    for f in os.listdir(directory):
+        if f.endswith('.json'):
+            if filter_type is None or filter_type in f:
+                files.append(f)
+    
+    return sorted(files)
+
+
 def render_visualize_view():
     """Render the JSON visualization view."""
     st.header("Visualize JSON")
     
     st.subheader("Upload JSON Files to Visualize")
     
-    uploaded_files = st.file_uploader(
-        "Choose JSON files",
-        type=["json"],
-        accept_multiple_files=True,
-        key="visualize_upload"
-    )
-    
-    visualize_button = st.button("Visualize", use_container_width=True, type="primary", key="visualize_btn")
     
     return uploaded_files, visualize_button
 

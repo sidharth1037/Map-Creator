@@ -458,3 +458,172 @@ def process_visualize(uploaded_files):
         import traceback
         st.error(traceback.format_exc())
         return False
+
+
+def process_floor_connections(walls_json_path, stairs_json_path):
+    """
+    Display walls and stairs with Plotly and allow setting floor connections.
+    """
+    import plotly.graph_objects as go
+    
+    if not walls_json_path or not stairs_json_path:
+        st.error("Please select both walls and stairs JSON files")
+        return None, None
+    
+    if not os.path.exists(walls_json_path):
+        st.error(f"Walls file not found: {walls_json_path}")
+        return None, None
+    
+    if not os.path.exists(stairs_json_path):
+        st.error(f"Stairs file not found: {stairs_json_path}")
+        return None, None
+    
+    # Load data
+    with open(walls_json_path, 'r') as f:
+        walls_data = json.load(f)
+    
+    with open(stairs_json_path, 'r') as f:
+        stairs_data = json.load(f)
+    
+    # Create Plotly figure
+    fig = go.Figure()
+    
+    # Add walls (blue lines)
+    for item in walls_data:
+        if isinstance(item, dict) and 'x1' in item and 'y1' in item:
+            x1, y1 = item['x1'], item['y1']
+            x2 = item.get('x2', x1)
+            y2 = item.get('y2', y1)
+            fig.add_trace(go.Scatter(
+                x=[x1, x2],
+                y=[y1, y2],
+                mode='lines',
+                line=dict(color='blue', width=2),
+                hoverinfo='skip',
+                showlegend=False
+            ))
+    
+    # Add stairs (red lines) with polygon IDs
+    stair_polygons = {}
+    for item in stairs_data:
+        if isinstance(item, dict) and 'x1' in item and 'y1' in item:
+            x1, y1 = item['x1'], item['y1']
+            x2 = item.get('x2', x1)
+            y2 = item.get('y2', y1)
+            poly_id = item.get('stair_polygon_id', -1)
+            
+            # Track polygon centers for labels
+            if poly_id not in stair_polygons:
+                stair_polygons[poly_id] = {'xs': [], 'ys': []}
+            stair_polygons[poly_id]['xs'].extend([x1, x2])
+            stair_polygons[poly_id]['ys'].extend([y1, y2])
+            
+            fig.add_trace(go.Scatter(
+                x=[x1, x2],
+                y=[y1, y2],
+                mode='lines',
+                line=dict(color='red', width=3),
+                hovertext=f"Stair Polygon {poly_id}",
+                hoverinfo='text',
+                showlegend=False
+            ))
+    
+    # Add polygon ID labels at centroid
+    for poly_id, coords in stair_polygons.items():
+        if coords['xs'] and coords['ys']:
+            center_x = np.mean(coords['xs'])
+            center_y = np.mean(coords['ys'])
+            fig.add_trace(go.Scatter(
+                x=[center_x],
+                y=[center_y],
+                mode='text',
+                text=[f"P{poly_id}"],
+                textposition='middle center',
+                textfont=dict(size=12, color='red'),
+                hoverinfo='skip',
+                showlegend=False
+            ))
+    
+    # Update layout
+    fig.update_layout(
+        title=f"Walls (Blue) and Stairs (Red) with Polygon IDs",
+        xaxis_title="X",
+        yaxis_title="Y",
+        hovermode='closest',
+        height=600,
+        showlegend=False,
+        xaxis=dict(scaleanchor="y", scaleratio=1),
+        yaxis=dict(scaleanchor="x", scaleratio=1)
+    )
+    
+    st.plotly_chart(fig, width='stretch')
+    
+    return walls_data, stairs_data
+
+
+def save_floor_connection(stairs_json_path, connections_list):
+    """
+    Save multiple floor connections to stairs JSON file.
+    
+    Args:
+        stairs_json_path: Path to stairs JSON file
+        connections_list: List of dicts with 'polygon_id', 'from_floor', 'to_floor'
+    """
+    try:
+        if not connections_list:
+            st.error("No connections to save")
+            return False
+        
+        # Load current stairs data
+        with open(stairs_json_path, 'r') as f:
+            stairs_data = json.load(f)
+        
+        # Create a mapping of polygon IDs to floor connections
+        conn_map = {}
+        for conn in connections_list:
+            poly_id = conn['polygon_id']
+            conn_data = [float(conn['from_floor']), float(conn['to_floor'])]
+            conn_map[poly_id] = conn_data
+        
+        # Update all segments with the specified polygon IDs
+        total_updated = 0
+        updated_segments_info = {}
+        
+        for item in stairs_data:
+            if isinstance(item, dict) and 'stair_polygon_id' in item:
+                poly_id = item['stair_polygon_id']
+                if poly_id in conn_map:
+                    item['floors_connected'] = conn_map[poly_id]
+                    total_updated += 1
+                    if poly_id not in updated_segments_info:
+                        updated_segments_info[poly_id] = 0
+                    updated_segments_info[poly_id] += 1
+        
+        if total_updated == 0:
+            st.error("No segments found with the specified polygon IDs")
+            return False
+        
+        # Save updated data back to the SAME stairs JSON file
+        with open(stairs_json_path, 'w') as f:
+            json.dump(stairs_data, f, indent=2)
+        
+        # Display confirmation
+        st.success(f"✅ Floor connections saved to {stairs_json_path}")
+        
+        # Show summary
+        with st.expander("📊 Save Summary", expanded=True):
+            st.write(f"**Total connections added:** {len(connections_list)}")
+            st.write(f"**Total segments updated:** {total_updated}")
+            st.write("**Segments by polygon:**")
+            for poly_id, count in sorted(updated_segments_info.items()):
+                from_f, to_f = conn_map[poly_id]
+                st.write(f"  • Polygon {poly_id}: {count} segments ({from_f} ↔ {to_f})")
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error saving floor connections: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
+
