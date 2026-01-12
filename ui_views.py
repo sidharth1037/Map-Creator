@@ -23,6 +23,7 @@ def render_timeline():
         ("Floor Data", "floor_connections"),
         ("Entrances", "entrances"),
         ("Rooms", "rooms"),
+        ("Match", "match"),
         ("Visualize", "visualize"),
     ]
     
@@ -647,3 +648,59 @@ def render_rooms_view():
     save_button = st.button("Save Rooms to JSON", key="rooms_save_button")
     
     return walls_json_path, plot_button, point1_id, point2_id, point3_id, point4_id, room_full_name, add_room_button, save_button
+
+
+def render_match_view():
+    """Render the floor matching view."""
+    st.header("Match Floors")
+    
+    st.write("Keep one floor as reference and snap another floor's coordinates to match boundaries. Supports walls and stairs files.")
+    
+    st.markdown("---")
+    st.subheader("Select Reference Floor (Fixed)")
+    
+    json_dir = "outputs"
+    json_files = _get_json_files(json_dir)
+    
+    # Filter for walls and stairs only
+    ref_files = [f for f in json_files if '_walls' in f or '_stairs' in f]
+    
+    reference_file = st.selectbox(
+        "Reference file (won't be modified)",
+        ref_files,
+        key="match_reference_select"
+    )
+    
+    reference_json_path = f"{json_dir}/{reference_file}" if reference_file else None
+    
+    st.markdown("---")
+    st.subheader("Select Target Floor (Will be Modified)")
+    
+    # Filter out the reference file from target options
+    target_files = [f for f in ref_files if f != reference_file]
+    
+    target_file = st.selectbox(
+        "Target file (coordinates will be snapped to reference)",
+        target_files,
+        key="match_target_select"
+    )
+    
+    target_json_path = f"{json_dir}/{target_file}" if target_file else None
+    
+    st.markdown("---")
+    st.subheader("Snapping Settings")
+    
+    threshold = st.slider(
+        "Snapping Threshold (pixels)",
+        min_value=5,
+        max_value=200,
+        value=50,
+        step=5,
+        help="Maximum distance to snap coordinates to reference points"
+    )
+    
+    st.markdown("---")
+    
+    match_button = st.button("Match & Snap Coordinates", key="match_button")
+    
+    return reference_json_path, target_json_path, threshold, match_button

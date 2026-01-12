@@ -1101,3 +1101,83 @@ def save_rooms(floor_number, rooms_list, points_dict):
         import traceback
         st.error(traceback.format_exc())
         return False
+
+
+def process_match(reference_json_path, target_json_path, threshold):
+    """
+    Match and snap target floor coordinates to reference floor.
+    
+    Args:
+        reference_json_path: Path to reference JSON file
+        target_json_path: Path to target JSON file to be modified
+        threshold: Snapping threshold in pixels
+    
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        from pipeline_match import load_json, save_json, match_coordinates
+        
+        if not reference_json_path or not target_json_path:
+            st.error("Please select both reference and target files")
+            return False
+        
+        if not os.path.exists(reference_json_path):
+            st.error(f"Reference file not found: {reference_json_path}")
+            return False
+        
+        if not os.path.exists(target_json_path):
+            st.error(f"Target file not found: {target_json_path}")
+            return False
+        
+        # Load both files
+        try:
+            reference_data = load_json(reference_json_path)
+            target_data = load_json(target_json_path)
+        except json.JSONDecodeError as e:
+            st.error(f"Invalid JSON: {str(e)}")
+            return False
+        
+        if not reference_data or not target_data:
+            st.error("One or both JSON files are empty")
+            return False
+        
+        st.info(f"Reference file: {os.path.basename(reference_json_path)}")
+        st.info(f"Target file: {os.path.basename(target_json_path)}")
+        st.info(f"Snapping threshold: {threshold} pixels")
+        
+        # Perform matching
+        progress_bar = st.progress(0, text="Analyzing coordinates...")
+        
+        modified_target, stats = match_coordinates(reference_data, target_data, threshold=threshold)
+        
+        progress_bar.progress(50, text="Saving matched coordinates...")
+        
+        # Save modified target
+        save_json(modified_target, target_json_path)
+        
+        progress_bar.progress(100, text="Complete")
+        
+        st.success(f"✅ Successfully matched and saved {target_json_path}")
+        
+        # Show statistics
+        with st.expander("📊 Matching Summary", expanded=True):
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Reference Points", stats['total_reference_points'])
+            with col2:
+                st.metric("Target Lines", stats['total_lines'])
+            with col3:
+                st.metric("Vertical Lines Snapped", stats['vertical_lines_snapped'])
+            with col4:
+                st.metric("Horizontal Lines Snapped", stats['horizontal_lines_snapped'])
+            
+            st.write(f"**Result:** {stats['vertical_lines_snapped'] + stats['horizontal_lines_snapped']} out of {stats['total_lines']} building walls were snapped to reference coordinates within {threshold}px threshold ({stats['snap_percentage']:.1f}%).")
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error during matching: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False

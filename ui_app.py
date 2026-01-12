@@ -8,6 +8,7 @@ from ui_views import (
     render_walls_view,
     render_stairs_view,
     render_snap_view,
+    render_match_view,
     render_floor_connections_view,
     render_entrances_view,
     render_rooms_view,
@@ -17,6 +18,7 @@ from ui_processing import (
     process_walls,
     process_stairs,
     process_snap,
+    process_match,
     process_floor_connections,
     save_floor_connection,
     process_entrances_plot,
@@ -279,6 +281,13 @@ elif st.session_state.current_view == 'rooms':
                 st.session_state.rooms_pending = []
         else:
             st.error("Please enter a floor number and plot the map first")
+
+# Match View
+elif st.session_state.current_view == 'match':
+    reference_json_path, target_json_path, threshold, match_button = render_match_view()
+    
+    if match_button:
+        process_match(reference_json_path, target_json_path, threshold)
 
 # Visualize View
 elif st.session_state.current_view == 'visualize':
