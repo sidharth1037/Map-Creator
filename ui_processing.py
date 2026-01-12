@@ -181,8 +181,14 @@ def process_stairs(stairs_image_path):
         # Save extended data for later snapping
         st.session_state.stairs_aligned_data = extended_data
         
-        # Save and open image
+        # Save stairs JSON to outputs
         os.makedirs("outputs", exist_ok=True)
+        stairs_json_path = f"outputs/floor_{st.session_state.current_floor}_stairs.json"
+        with open(stairs_json_path, 'w') as f:
+            json.dump(extended_data, f, indent=2)
+        st.info(f"Stairs saved to {stairs_json_path}")
+        
+        # Save verification image
         output_path = f"outputs/floor_{st.session_state.current_floor}_stairs_verification.png"
         cv2.imwrite(output_path, verification_img)
         
@@ -198,6 +204,13 @@ def process_stairs(stairs_image_path):
         
         # Move to snap step
         st.session_state.current_view = 'snap'
+        st.rerun()
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return False
         st.rerun()
         
         return True
@@ -380,15 +393,26 @@ def process_visualize(uploaded_files):
         all_y = []
         
         for data in all_data:
-            # Handle both segment data (x1, y1, x2, y2) and entrance data (x, y)
-            if isinstance(data, dict) and 'entrances' in data:
-                # This is an entrances JSON with 'entrances' array
-                for item in data.get('entrances', []):
-                    if isinstance(item, dict) and 'x' in item and 'y' in item:
-                        all_x.append(item['x'])
-                        all_y.append(item['y'])
+            # Handle segment data (x1, y1, x2, y2), entrance data (x, y), and room data (x, y)
+            if isinstance(data, dict):
+                if 'entrances' in data:
+                    # This is an entrances JSON with 'entrances' array
+                    for item in data.get('entrances', []):
+                        if isinstance(item, dict) and 'x' in item and 'y' in item:
+                            all_x.append(item['x'])
+                            all_y.append(item['y'])
+                elif 'rooms' in data:
+                    # This is a rooms JSON with 'rooms' array
+                    for item in data.get('rooms', []):
+                        if isinstance(item, dict) and 'x' in item and 'y' in item:
+                            all_x.append(item['x'])
+                            all_y.append(item['y'])
+                else:
+                    # This is segment data (walls, stairs) - data is a dict but not entrances/rooms
+                    # Skip dict-based non-segment data
+                    pass
             else:
-                # This is segment data (walls, stairs)
+                # This is segment data as array (walls, stairs)
                 for item in data:
                     if isinstance(item, dict):
                         if 'x1' in item and 'y1' in item:
@@ -411,13 +435,23 @@ def process_visualize(uploaded_files):
         for file_idx, data in enumerate(all_data):
             color = colors[file_idx % len(colors)]
             
-            # Check if this is entrances data or segment data
-            if isinstance(data, dict) and 'entrances' in data:
-                # Draw entrances as points
-                for item in data.get('entrances', []):
-                    if isinstance(item, dict) and 'x' in item and 'y' in item:
-                        x, y = int(item['x']), int(item['y'])
-                        cv2.circle(img, (x, y), 6, color, -1)  # Filled circle for entrance
+            # Check if this is entrances/rooms data or segment data
+            if isinstance(data, dict):
+                if 'entrances' in data:
+                    # Draw entrances as points
+                    for item in data.get('entrances', []):
+                        if isinstance(item, dict) and 'x' in item and 'y' in item:
+                            x, y = int(item['x']), int(item['y'])
+                            cv2.circle(img, (x, y), 6, color, -1)  # Filled circle for entrance
+                elif 'rooms' in data:
+                    # Draw rooms as points
+                    for item in data.get('rooms', []):
+                        if isinstance(item, dict) and 'x' in item and 'y' in item:
+                            x, y = int(item['x']), int(item['y'])
+                            cv2.circle(img, (x, y), 6, color, -1)  # Filled circle for room centroid
+                else:
+                    # This is not a recognized format
+                    pass
             else:
                 # Draw segments (walls, stairs)
                 for item in data:
@@ -431,8 +465,8 @@ def process_visualize(uploaded_files):
         # Collect all unique vertices
         unique_points = set()
         for data in all_data:
-            if isinstance(data, dict) and 'entrances' in data:
-                # Skip entrance points from vertex collection (they're already drawn as filled circles)
+            if isinstance(data, dict) and ('entrances' in data or 'rooms' in data):
+                # Skip entrance/room points from vertex collection (they're already drawn as filled circles)
                 pass
             else:
                 # Collect segment endpoints
