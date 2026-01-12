@@ -20,7 +20,7 @@ def render_timeline():
         ("Walls", "walls"),
         ("Stairs", "stairs"),
         ("Snap", "snap"),
-        ("Floor Conn", "floor_connections"),
+        ("Floor Data", "floor_connections"),
         ("Entrances", "entrances"),
         ("Rooms", "rooms"),
         ("Visualize", "visualize"),
