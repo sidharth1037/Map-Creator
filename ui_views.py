@@ -791,6 +791,36 @@ def render_boundary_view():
             load_boundary_button = None
         
         st.markdown("---")
+        st.write("**Polygon Management:**")
+        
+        # Polygon selector and controls
+        col_poly1, col_poly2, col_poly3 = st.columns([2, 1, 1])
+        
+        with col_poly1:
+            polygon_names = [p['name'] for p in st.session_state.boundary_polygons]
+            current_poly_idx = st.selectbox(
+                "Select polygon",
+                range(len(polygon_names)) if polygon_names else [0],
+                format_func=lambda i: polygon_names[i] if i < len(polygon_names) else "Default",
+                key="boundary_poly_select"
+            )
+        
+        with col_poly2:
+            if st.button("➕ New Polygon", key="boundary_new_poly"):
+                new_poly = {
+                    "name": f"Polygon {len(st.session_state.boundary_polygons) + 1}",
+                    "points": []
+                }
+                st.session_state.boundary_polygons.append(new_poly)
+                st.rerun()
+        
+        with col_poly3:
+            if len(st.session_state.boundary_polygons) > 1:
+                if st.button("🗑️ Delete Polygon", key="boundary_delete_poly"):
+                    st.session_state.boundary_polygons.pop(current_poly_idx)
+                    st.rerun()
+        
+        st.markdown("---")
         st.write("**Add Boundary Points:**")
         
         # Point ID input
@@ -808,23 +838,24 @@ def render_boundary_view():
         
         st.markdown("---")
         
-        # Display boundary points
-        if st.session_state.boundary_points:
-            st.write(f"**Boundary Points: {len(st.session_state.boundary_points)}**")
-            
-            for idx, point in enumerate(st.session_state.boundary_points):
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col1:
-                    st.write(f"**P{idx}**")
-                with col2:
-                    st.write(f"({point['x']}, {point['y']})")
-                with col3:
-                    if st.button("✕", key=f"boundary_remove_{idx}"):
-                        st.session_state.boundary_points.pop(idx)
-                        st.session_state.boundary_plot_updated = True
-                        st.rerun()
-        else:
-            st.info("No boundary points added yet")
+        # Display current polygon points
+        if current_poly_idx < len(st.session_state.boundary_polygons):
+            current_polygon = st.session_state.boundary_polygons[current_poly_idx]
+            if current_polygon['points']:
+                st.write(f"**{current_polygon['name']}: {len(current_polygon['points'])} points**")
+                
+                for idx, point in enumerate(current_polygon['points']):
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    with col1:
+                        st.write(f"**B{idx}**")
+                    with col2:
+                        st.write(f"({point['x']}, {point['y']})")
+                    with col3:
+                        if st.button("✕", key=f"boundary_remove_{idx}"):
+                            current_polygon['points'].pop(idx)
+                            st.rerun()
+            else:
+                st.info(f"No points in {current_polygon['name']} yet")
         
         st.markdown("---")
         
