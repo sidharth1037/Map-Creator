@@ -24,6 +24,7 @@ def render_timeline():
         ("Entrances", "entrances"),
         ("Rooms", "rooms"),
         ("Match", "match"),
+        ("Boundary", "boundary"),
         ("Visualize", "visualize"),
     ]
     
@@ -704,3 +705,133 @@ def render_match_view():
     match_button = st.button("Match & Snap Coordinates", key="match_button")
     
     return reference_json_path, target_json_path, threshold, match_button
+
+
+def render_boundary_view():
+    """Render the floor boundary definition view."""
+    st.header("Define Floor Boundary")
+    
+    st.write("Click points on the plot or enter their IDs. Points will be connected in order with a boundary line.")
+    
+    st.markdown("---")
+    
+    # Left and right columns
+    col_plot, col_controls = st.columns([2, 1])
+    
+    with col_plot:
+        st.subheader("Floor Plan - Click points or select from list")
+        plot_placeholder = st.empty()
+    
+    with col_controls:
+        st.subheader("Controls")
+        
+        # Option to load existing boundary or create new
+        load_option = st.radio("Choose:", ["Create New Boundary", "Load Existing Boundary"], key="boundary_load_option")
+        
+        st.markdown("---")
+        
+        if load_option == "Load Existing Boundary":
+            st.write("**Load Boundary File:**")
+            json_dir = "outputs"
+            json_files = _get_json_files(json_dir, filter_type="_boundary")
+            
+            boundary_file = st.selectbox(
+                "Select boundary file",
+                json_files,
+                key="boundary_file_select"
+            )
+            
+            boundary_json_path = f"{json_dir}/{boundary_file}" if boundary_file else None
+            
+            st.write("**Optional - Include Stairs:**")
+            stairs_files = _get_json_files(json_dir, filter_type="_stairs")
+            stairs_files = ["None"] + stairs_files
+            
+            stairs_file = st.selectbox(
+                "Select stairs file (optional)",
+                stairs_files,
+                key="boundary_stairs_select_load"
+            )
+            
+            stairs_json_path = f"{json_dir}/{stairs_file}" if stairs_file and stairs_file != "None" else None
+            
+            load_boundary_button = st.button("Load Boundary", key="boundary_load_button")
+            
+            plot_button = None
+            walls_json_path = None
+        else:
+            st.write("**Create New Boundary:**")
+            # Floor selection
+            json_dir = "outputs"
+            json_files = _get_json_files(json_dir, filter_type="_walls")
+            
+            walls_file = st.selectbox(
+                "Select walls file",
+                json_files,
+                key="boundary_walls_select"
+            )
+            
+            walls_json_path = f"{json_dir}/{walls_file}" if walls_file else None
+            
+            # Stairs file selection (optional)
+            st.write("**Optional - Include Stairs:**")
+            stairs_files = _get_json_files(json_dir, filter_type="_stairs")
+            stairs_files = ["None"] + stairs_files
+            
+            stairs_file = st.selectbox(
+                "Select stairs file (optional)",
+                stairs_files,
+                key="boundary_stairs_select"
+            )
+            
+            stairs_json_path = f"{json_dir}/{stairs_file}" if stairs_file and stairs_file != "None" else None
+            
+            plot_button = st.button("Plot Walls & Points", key="boundary_plot_button")
+            boundary_json_path = None
+            load_boundary_button = None
+        
+        st.markdown("---")
+        st.write("**Add Boundary Points:**")
+        
+        # Point ID input
+        point_id_input = st.text_input(
+            "Enter point number",
+            placeholder="e.g., 0, 1, 2",
+            key="boundary_point_id"
+        )
+        
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            add_point_button = st.button("Add Point", key="boundary_add_point")
+        with col_btn2:
+            plot_verification_button = st.button("Plot Verification", key="boundary_plot_verify")
+        
+        st.markdown("---")
+        
+        # Display boundary points
+        if st.session_state.boundary_points:
+            st.write(f"**Boundary Points: {len(st.session_state.boundary_points)}**")
+            
+            for idx, point in enumerate(st.session_state.boundary_points):
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col1:
+                    st.write(f"**P{idx}**")
+                with col2:
+                    st.write(f"({point['x']}, {point['y']})")
+                with col3:
+                    if st.button("✕", key=f"boundary_remove_{idx}"):
+                        st.session_state.boundary_points.pop(idx)
+                        st.session_state.boundary_plot_updated = True
+                        st.rerun()
+        else:
+            st.info("No boundary points added yet")
+        
+        st.markdown("---")
+        
+        # Floor number input
+        floor_number = st.text_input("Floor number", value="", key="boundary_floor", placeholder="e.g., 1 or 1.5")
+        
+        # Save button
+        save_button = st.button("Save Boundary", key="boundary_save_button", type="primary")
+    
+    return plot_placeholder, walls_json_path, stairs_json_path, plot_button, boundary_json_path, load_boundary_button, point_id_input, add_point_button, plot_verification_button, floor_number, save_button

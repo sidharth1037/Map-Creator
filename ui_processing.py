@@ -1181,3 +1181,298 @@ def process_match(reference_json_path, target_json_path, threshold):
         import traceback
         st.error(traceback.format_exc())
         return False
+
+
+def process_boundary_plot(walls_json_path, boundary_points, stairs_json_path=None):
+    """
+    Generate a visualization of walls with extracted points and boundary polygon.
+    
+    Args:
+        walls_json_path: Path to walls JSON file
+        boundary_points: List of dicts with {id, x, y}
+        stairs_json_path: Optional path to stairs JSON file
+    
+    Returns:
+        Tuple: (figure, points_dict) where points_dict = {point_id: (x, y)}
+    """
+    try:
+        import plotly.graph_objects as go
+        
+        # Load walls JSON
+        with open(walls_json_path, 'r') as f:
+            walls_data = json.load(f)
+        
+        if not walls_data:
+            st.error("No walls data found")
+            return None, None
+        
+        # Extract unique points from walls and stairs
+        points_dict = {}
+        point_counter = 0
+        
+        for segment in walls_data:
+            if isinstance(segment, dict) and 'x1' in segment and 'y1' in segment:
+                p1 = (int(segment['x1']), int(segment['y1']))
+                p2 = (int(segment['x2']) if 'x2' in segment else int(segment['x1']),
+                      int(segment['y2']) if 'y2' in segment else int(segment['y1']))
+                
+                # Add first point if not already present
+                if p1 not in points_dict.values():
+                    points_dict[f"P{point_counter}"] = p1
+                    point_counter += 1
+                
+                # Add second point if different
+                if p2 not in points_dict.values():
+                    points_dict[f"P{point_counter}"] = p2
+                    point_counter += 1
+        
+        # Extract points from stairs if provided
+        if stairs_json_path and os.path.exists(stairs_json_path):
+            try:
+                with open(stairs_json_path, 'r') as f:
+                    stairs_data = json.load(f)
+                
+                stairs_segments = stairs_data if isinstance(stairs_data, list) else stairs_data.get('stairs', [])
+                
+                for segment in stairs_segments:
+                    if isinstance(segment, dict) and 'x1' in segment and 'y1' in segment:
+                        p1 = (int(segment['x1']), int(segment['y1']))
+                        p2 = (int(segment['x2']) if 'x2' in segment else int(segment['x1']),
+                              int(segment['y2']) if 'y2' in segment else int(segment['y1']))
+                        
+                        # Add first point if not already present
+                        if p1 not in points_dict.values():
+                            points_dict[f"P{point_counter}"] = p1
+                            point_counter += 1
+                        
+                        # Add second point if different
+                        if p2 not in points_dict.values():
+                            points_dict[f"P{point_counter}"] = p2
+                            point_counter += 1
+            except Exception as e:
+                st.warning(f"Could not extract stairs points: {str(e)}")
+        
+        st.info(f"Extracted {len(points_dict)} unique points from walls and stairs")
+        
+        # Create Plotly figure
+        fig = go.Figure()
+        
+        # Add walls
+        for segment in walls_data:
+            if isinstance(segment, dict) and 'x1' in segment and 'y1' in segment:
+                x1, y1 = segment['x1'], segment['y1']
+                x2 = segment.get('x2', x1)
+                y2 = segment.get('y2', y1)
+                
+                fig.add_trace(go.Scatter(
+                    x=[x1, x2],
+                    y=[y1, y2],
+                    mode='lines',
+                    line=dict(color='blue', width=2),
+                    hoverinfo='skip',
+                    showlegend=False
+                ))
+        
+        # Add stairs if provided
+        if stairs_json_path and os.path.exists(stairs_json_path):
+            try:
+                with open(stairs_json_path, 'r') as f:
+                    stairs_data = json.load(f)
+                
+                # Extract segments - handle both list and dict formats
+                stairs_segments = stairs_data if isinstance(stairs_data, list) else stairs_data.get('stairs', [])
+                
+                for segment in stairs_segments:
+                    if isinstance(segment, dict) and 'x1' in segment and 'y1' in segment:
+                        x1, y1 = segment['x1'], segment['y1']
+                        x2 = segment.get('x2', x1)
+                        y2 = segment.get('y2', y1)
+                        
+                        fig.add_trace(go.Scatter(
+                            x=[x1, x2],
+                            y=[y1, y2],
+                            mode='lines',
+                            line=dict(color='orange', width=2),
+                            hoverinfo='skip',
+                            showlegend=False
+                        ))
+            except Exception as e:
+                st.warning(f"Could not load stairs data: {str(e)}")
+        
+        # Add all available points with labels
+        if points_dict:
+            point_ids = list(points_dict.keys())
+            point_coords = list(points_dict.values())
+            xs = [p[0] for p in point_coords]
+            ys = [p[1] for p in point_coords]
+            
+            fig.add_trace(go.Scatter(
+                x=xs,
+                y=ys,
+                mode='markers+text',
+                marker=dict(color='darkgreen', size=6),
+                text=point_ids,
+                textposition='top center',
+                textfont=dict(size=9, color='darkgreen'),
+                hoverinfo='skip',
+                showlegend=False,
+                name='Available Points'
+            ))
+        
+        # Add boundary points and connecting lines
+        if boundary_points and len(boundary_points) > 0:
+            # Get boundary coordinates
+            boundary_xs = [p['x'] for p in boundary_points]
+            boundary_ys = [p['y'] for p in boundary_points]
+            
+            # Close the polygon by adding first point at the end
+            boundary_xs_closed = boundary_xs + [boundary_xs[0]]
+            boundary_ys_closed = boundary_ys + [boundary_ys[0]]
+            
+            # Add boundary lines
+            fig.add_trace(go.Scatter(
+                x=boundary_xs_closed,
+                y=boundary_ys_closed,
+                mode='lines',
+                line=dict(color='red', width=3),
+                name='Boundary',
+                hoverinfo='skip',
+                showlegend=True
+            ))
+            
+            # Add boundary points with labels
+            fig.add_trace(go.Scatter(
+                x=boundary_xs,
+                y=boundary_ys,
+                mode='markers+text',
+                marker=dict(color='red', size=10),
+                text=[f"B{i}" for i in range(len(boundary_points))],
+                textposition='top center',
+                textfont=dict(size=10, color='red'),
+                name='Boundary Points',
+                hoverinfo='skip',
+                showlegend=True
+            ))
+        
+        # Update layout
+        fig.update_layout(
+            title="Floor Plan with Boundary Definition (Blue=Walls, Orange=Stairs, Green=Available Points, Red=Boundary)",
+            xaxis_title="X",
+            yaxis_title="Y",
+            height=700,
+            hovermode='closest',
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(scaleanchor="y", scaleratio=1),
+            yaxis=dict(scaleanchor="x", scaleratio=1)
+        )
+        
+        return fig, points_dict
+        
+    except FileNotFoundError:
+        st.error(f"Walls file not found: {walls_json_path}")
+        return None, None
+    except json.JSONDecodeError:
+        st.error("Invalid JSON in walls file")
+        return None, None
+    except Exception as e:
+        st.error(f"Error processing boundary plot: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None, None
+
+
+def save_boundary(floor_number, boundary_points):
+    """
+    Save boundary points to JSON file.
+    
+    Args:
+        floor_number: Floor number (int or float or string)
+        boundary_points: List of dicts with {id, x, y}
+    
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        from pipeline_boundary import save_boundary_json
+        
+        if not floor_number:
+            st.error("Please enter a floor number")
+            return False
+        
+        if not boundary_points or len(boundary_points) < 3:
+            st.error("Please define at least 3 boundary points")
+            return False
+        
+        # Save using pipeline function
+        success, result = save_boundary_json(boundary_points, floor_number)
+        
+        if success:
+            st.success(f"✅ Boundary saved to {result}")
+            
+            with st.expander("📊 Boundary Summary", expanded=True):
+                st.write(f"**Floor:** {floor_number}")
+                st.write(f"**Total boundary points:** {len(boundary_points)}")
+                for point in boundary_points:
+                    st.write(f"  • P{point['id']}: ({point['x']}, {point['y']})")
+            
+            return True
+        else:
+            st.error(f"Failed to save boundary: {result}")
+            return False
+        
+    except Exception as e:
+        st.error(f"Error saving boundary: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
+
+
+def load_boundary(boundary_json_path):
+    """
+    Load an existing boundary file and extract the points for editing.
+    
+    Args:
+        boundary_json_path: Path to the boundary JSON file
+    
+    Returns:
+        Tuple: (boundary_points, floor_number, walls_json_path)
+               or (None, None, None) on failure
+    """
+    try:
+        if not boundary_json_path or not os.path.exists(boundary_json_path):
+            st.error("Boundary file not found")
+            return None, None, None
+        
+        with open(boundary_json_path, 'r') as f:
+            boundary_data = json.load(f)
+        
+        floor_number = boundary_data.get('floor', '')
+        boundary_points = boundary_data.get('boundary_points', [])
+        
+        if not boundary_points:
+            st.error("No boundary points found in file")
+            return None, None, None
+        
+        # Try to find corresponding walls file
+        json_dir = "outputs"
+        walls_filename = f"floor_{floor_number}_walls.json"
+        walls_json_path = os.path.join(json_dir, walls_filename)
+        
+        if not os.path.exists(walls_json_path):
+            st.warning(f"Walls file not found: {walls_filename}")
+            walls_json_path = None
+        
+        st.success(f"✅ Loaded boundary with {len(boundary_points)} points from floor {floor_number}")
+        
+        return boundary_points, floor_number, walls_json_path
+        
+    except json.JSONDecodeError:
+        st.error("Invalid JSON in boundary file")
+        return None, None, None
+    except Exception as e:
+        st.error(f"Error loading boundary: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None, None, None
+

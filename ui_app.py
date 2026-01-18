@@ -9,6 +9,7 @@ from ui_views import (
     render_stairs_view,
     render_snap_view,
     render_match_view,
+    render_boundary_view,
     render_floor_connections_view,
     render_entrances_view,
     render_rooms_view,
@@ -19,6 +20,9 @@ from ui_processing import (
     process_stairs,
     process_snap,
     process_match,
+    process_boundary_plot,
+    save_boundary,
+    load_boundary,
     process_floor_connections,
     save_floor_connection,
     process_entrances_plot,
@@ -85,6 +89,12 @@ if 'rooms_last_path' not in st.session_state:
     st.session_state.rooms_last_path = None
 if 'rooms_points_dict' not in st.session_state:
     st.session_state.rooms_points_dict = None
+if 'boundary_points' not in st.session_state:
+    st.session_state.boundary_points = []
+if 'boundary_plot_updated' not in st.session_state:
+    st.session_state.boundary_plot_updated = False
+if 'boundary_walls_path' not in st.session_state:
+    st.session_state.boundary_walls_path = None
 
 st.title("Floor Plan Vectorizer")
 # Render timeline at top
@@ -288,6 +298,81 @@ elif st.session_state.current_view == 'match':
     
     if match_button:
         process_match(reference_json_path, target_json_path, threshold)
+
+# Boundary View
+elif st.session_state.current_view == 'boundary':
+    plot_placeholder, walls_json_path, stairs_json_path, plot_button, boundary_json_path, load_boundary_button, point_id_input, add_point_button, plot_verification_button, floor_number, save_button = render_boundary_view()
+    
+    # Initialize session state variables
+    if 'boundary_points_dict' not in st.session_state:
+        st.session_state.boundary_points_dict = {}
+    if 'boundary_plot_fig' not in st.session_state:
+        st.session_state.boundary_plot_fig = None
+    
+    # Handle load existing boundary button
+    if load_boundary_button:
+        boundary_points, loaded_floor, walls_path = load_boundary(boundary_json_path)
+        if boundary_points:
+            st.session_state.boundary_points = boundary_points
+            st.session_state.current_floor = loaded_floor
+            st.session_state.boundary_walls_path = walls_path
+            st.session_state.boundary_stairs_path = stairs_json_path
+            if walls_path:
+                fig, points_dict = process_boundary_plot(walls_path, boundary_points, stairs_json_path=stairs_json_path)
+                if fig and points_dict:
+                    st.session_state.boundary_points_dict = points_dict
+                    st.session_state.boundary_plot_fig = fig
+            st.rerun()
+    
+    # Update walls path if plot button clicked
+    if plot_button or st.session_state.boundary_walls_path is None:
+        st.session_state.boundary_walls_path = walls_json_path
+        st.session_state.boundary_stairs_path = stairs_json_path
+    
+    # Update plot when plot or verification button clicked
+    if (plot_button or plot_verification_button) and st.session_state.boundary_walls_path:
+        fig, points_dict = process_boundary_plot(st.session_state.boundary_walls_path, st.session_state.boundary_points, stairs_json_path=st.session_state.get('boundary_stairs_path'))
+        if fig and points_dict:
+            st.session_state.boundary_points_dict = points_dict
+            st.session_state.boundary_plot_fig = fig
+    
+    # Display plot (persists from session state)
+    if st.session_state.boundary_plot_fig:
+        with plot_placeholder.container():
+            st.plotly_chart(st.session_state.boundary_plot_fig, width='stretch')
+    
+    # Handle add point button (no rerun, just add to list)
+    if add_point_button:
+        point_number = point_id_input.strip()  # Get input number
+        
+        # Convert number to point ID (0 -> P0, 1 -> P1, etc.)
+        point_id = f"P{point_number}"
+        
+        # Find matching point from available points
+        found_point = None
+        for pid, (x, y) in st.session_state.boundary_points_dict.items():
+            if pid == point_id:
+                found_point = (x, y)
+                break
+        
+        if found_point:
+            new_point = {
+                'id': len(st.session_state.boundary_points),
+                'x': found_point[0],
+                'y': found_point[1],
+                'source_point_id': point_number
+            }
+            st.session_state.boundary_points.append(new_point)
+            st.success(f"Point {point_number} added. Click 'Plot Verification' to update.")
+        else:
+            available_points = ', '.join(sorted(st.session_state.boundary_points_dict.keys()))
+            st.error(f"Point {point_number} not found. Available: {available_points}")
+    
+    # Handle save button
+    if save_button:
+        if save_boundary(floor_number, st.session_state.boundary_points):
+            st.session_state.boundary_points = []
+            st.rerun()
 
 # Visualize View
 elif st.session_state.current_view == 'visualize':
