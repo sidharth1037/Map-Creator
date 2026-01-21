@@ -26,6 +26,8 @@ def render_timeline():
         ("Match", "match"),
         ("Boundary", "boundary"),
         ("Visualize", "visualize"),
+        ("Cost Map", "cost_map"),
+        ("Heuristic", "cost_heuristic"),
     ]
     
     st.markdown("---")
@@ -59,7 +61,6 @@ def render_timeline():
                 st.rerun()
     
     st.markdown("---")
-
 
 def render_walls_view():
     """Render the walls processing view."""
@@ -545,9 +546,12 @@ def render_visualize_view():
         accept_multiple_files=True
     )
     
+    # Option to show/hide coordinate labels and legends
+    show_labels = st.checkbox("Show coordinate labels and legends", value=True, key="visualize_show_labels")
+    
     visualize_button = st.button("Visualize", key="visualize_button")
     
-    return uploaded_files, visualize_button
+    return uploaded_files, visualize_button, show_labels
 
 
 def render_rooms_view():
@@ -866,3 +870,80 @@ def render_boundary_view():
         save_button = st.button("Save Boundary", key="boundary_save_button", type="primary")
     
     return plot_placeholder, walls_json_path, stairs_json_path, plot_button, boundary_json_path, load_boundary_button, point_id_input, add_point_button, plot_verification_button, floor_number, save_button
+
+
+def render_cost_map_view():
+    """Render the cost map generation view."""
+    st.header("Generate Cost Map")
+    
+    st.write("Create a travel cost heatmap from a floor plan image using distance transform.")
+    
+    st.markdown("---")
+    st.subheader("Input")
+    
+    # Image upload
+    uploaded_image = st.file_uploader(
+        "Upload floor plan image",
+        type=["jpg", "jpeg", "png", "bmp"],
+        key="cost_map_image"
+    )
+    
+    # Floor number input
+    floor_number = st.text_input(
+        "Floor number",
+        value="",
+        key="cost_map_floor",
+        placeholder="e.g., 1 or 1.5"
+    )
+    
+    st.markdown("---")
+    
+    # Generate button
+    generate_button = st.button("Generate Cost Map", key="cost_map_generate", type="primary")
+    
+    # Save button (will be active after generation)
+    save_button = st.button("Save Cost Map", key="cost_map_save")
+    
+    return uploaded_image, floor_number, generate_button, save_button
+
+
+def render_cost_heuristic_view():
+    """Render the movement cost heuristic generation view for mobile/API."""
+    st.header("Generate Movement Cost Heuristic")
+    
+    st.write("""
+    Pre-compute movement cost heuristics for mobile/API pathfinding algorithms.
+    Saves results as:
+    - **PNG**: Pre-computed movement costs (efficient lookup)
+    - **JSON**: Metadata for decoding PNG pixel values back to costs
+    
+    Mobile devices can then perform fast pathfinding with ZERO computation overhead.
+    """)
+    
+    st.markdown("---")
+    st.subheader("Input")
+    
+    # Image upload
+    uploaded_image = st.file_uploader(
+        "Upload floor plan image",
+        type=["jpg", "jpeg", "png", "bmp"],
+        key="cost_heuristic_image"
+    )
+    
+    # Floor number input
+    floor_number = st.text_input(
+        "Floor number",
+        value="",
+        key="cost_heuristic_floor",
+        placeholder="e.g., 1 or 1.5"
+    )
+    
+    st.markdown("---")
+    
+    # Generate button
+    generate_button = st.button("Generate Heuristic", key="cost_heuristic_generate", type="primary")
+    
+    # Save button (will be active after generation)
+    save_button = st.button("Save Heuristic (PNG + JSON)", key="cost_heuristic_save")
+    
+    return uploaded_image, floor_number, generate_button, save_button

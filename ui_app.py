@@ -13,7 +13,9 @@ from ui_views import (
     render_floor_connections_view,
     render_entrances_view,
     render_rooms_view,
-    render_visualize_view
+    render_visualize_view,
+    render_cost_map_view,
+    render_cost_heuristic_view
 )
 from ui_processing import (
     process_walls,
@@ -29,7 +31,11 @@ from ui_processing import (
     save_entrances,
     process_rooms_plot,
     save_rooms,
-    process_visualize
+    process_visualize,
+    process_cost_map,
+    save_cost_map,
+    process_cost_heuristic,
+    save_cost_heuristic
 )
 
 # Page configuration
@@ -95,6 +101,19 @@ if 'boundary_plot_updated' not in st.session_state:
     st.session_state.boundary_plot_updated = False
 if 'boundary_walls_path' not in st.session_state:
     st.session_state.boundary_walls_path = None
+if 'cost_map_heatmap' not in st.session_state:
+    st.session_state.cost_map_heatmap = None
+if 'cost_map_cost_map' not in st.session_state:
+    st.session_state.cost_map_cost_map = None
+if 'cost_map_normalized' not in st.session_state:
+    st.session_state.cost_map_normalized = None
+if 'cost_heuristic_cost_map' not in st.session_state:
+    st.session_state.cost_heuristic_cost_map = None
+if 'cost_heuristic_metadata' not in st.session_state:
+    st.session_state.cost_heuristic_metadata = None
+if 'cost_heuristic_heatmap' not in st.session_state:
+    st.session_state.cost_heuristic_heatmap = None
+
 
 st.title("Floor Plan Vectorizer")
 # Render timeline at top
@@ -379,9 +398,67 @@ elif st.session_state.current_view == 'boundary':
             st.session_state.boundary_polygons = [{"name": "Polygon 1", "points": []}]
             st.rerun()
 
+# Cost Map View
+elif st.session_state.current_view == 'cost_map':
+    uploaded_image, floor_number, generate_button, save_button = render_cost_map_view()
+    
+    # Handle generate button
+    if generate_button:
+        if not uploaded_image:
+            st.error("Please upload an image first")
+        else:
+            cost_map, heatmap, cost_normalized = process_cost_map(uploaded_image)
+            if heatmap is not None:
+                st.session_state.cost_map_heatmap = heatmap
+                st.session_state.cost_map_cost_map = cost_map
+                st.session_state.cost_map_normalized = cost_normalized
+    
+    # Display heatmap if available
+    if st.session_state.cost_map_heatmap is not None:
+        st.subheader("Cost Map Heatmap")
+        st.image(st.session_state.cost_map_heatmap, channels="BGR", caption="Travel Cost Map (Blue=Low Cost, Red=High Cost)")
+    
+    # Handle save button
+    if save_button:
+        if st.session_state.cost_map_heatmap is not None:
+            save_cost_map(st.session_state.cost_map_heatmap, floor_number)
+        else:
+            st.error("Please generate a cost map first")
+
+# Cost Heuristic View (for mobile/API pre-computation)
+elif st.session_state.current_view == 'cost_heuristic':
+    uploaded_image, floor_number, generate_button, save_button = render_cost_heuristic_view()
+    
+    # Handle generate button
+    if generate_button:
+        if not uploaded_image:
+            st.error("Please upload an image first")
+        else:
+            cost_map, metadata, heatmap = process_cost_heuristic(uploaded_image)
+            if cost_map is not None and metadata is not None:
+                st.session_state.cost_heuristic_cost_map = cost_map
+                st.session_state.cost_heuristic_metadata = metadata
+                st.session_state.cost_heuristic_heatmap = heatmap
+    
+    # Display heatmap if available
+    if st.session_state.cost_heuristic_heatmap is not None:
+        st.subheader("Movement Cost Heuristic Visualization")
+        st.image(st.session_state.cost_heuristic_heatmap, channels="BGR", caption="Movement Cost (Dark=High Cost, White=Low Cost)")
+    
+    # Handle save button
+    if save_button:
+        if st.session_state.cost_heuristic_cost_map is not None:
+            save_cost_heuristic(
+                st.session_state.cost_heuristic_cost_map,
+                st.session_state.cost_heuristic_metadata,
+                floor_number
+            )
+        else:
+            st.error("Please generate a heuristic first")
+
 # Visualize View
 elif st.session_state.current_view == 'visualize':
-    uploaded_files, visualize_button = render_visualize_view()
+    uploaded_files, visualize_button, show_labels = render_visualize_view()
     
     if visualize_button and uploaded_files:
-        process_visualize(uploaded_files)
+        process_visualize(uploaded_files, show_labels=show_labels)

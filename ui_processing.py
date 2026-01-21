@@ -331,12 +331,13 @@ def process_snap():
         return False
 
 
-def process_visualize(uploaded_files):
+def process_visualize(uploaded_files, show_labels=True):
     """
     Visualize multiple JSON files on a single image with different colors.
     
     Args:
         uploaded_files: List of Streamlit UploadedFile objects
+        show_labels: Boolean to show/hide coordinate labels
     
     Returns:
         Boolean indicating success
@@ -481,18 +482,20 @@ def process_visualize(uploaded_files):
         for pt in unique_points:
             x, y = pt
             cv2.circle(img, (x, y), 4, (0, 0, 255), -1)  # Red dots
-            coord_text = f"({x},{y})"
-            cv2.putText(img, coord_text, (x + 8, y - 8), font, 0.35, (0, 0, 0), 1, cv2.LINE_AA)
+            if show_labels:
+                coord_text = f"({x},{y})"
+                cv2.putText(img, coord_text, (x + 8, y - 8), font, 0.35, (0, 0, 0), 1, cv2.LINE_AA)
         
-        # Draw legend
-        legend_y = h - 20 - (len(file_names) * 20)
-        cv2.putText(img, "Legend:", (20, legend_y), font, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
-        
-        for idx, filename in enumerate(file_names):
-            y_pos = legend_y + 20 + (idx * 20)
-            color = colors[idx % len(colors)]
-            cv2.line(img, (20, y_pos - 5), (70, y_pos - 5), color, 2)
-            cv2.putText(img, filename, (80, y_pos), font, 0.4, (0, 0, 0), 1, cv2.LINE_AA)
+        # Draw legend (only if show_labels is True)
+        if show_labels:
+            legend_y = h - 20 - (len(file_names) * 20)
+            cv2.putText(img, "Legend:", (20, legend_y), font, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+            
+            for idx, filename in enumerate(file_names):
+                y_pos = legend_y + 20 + (idx * 20)
+                color = colors[idx % len(colors)]
+                cv2.line(img, (20, y_pos - 5), (70, y_pos - 5), color, 2)
+                cv2.putText(img, filename, (80, y_pos), font, 0.4, (0, 0, 0), 1, cv2.LINE_AA)
         
         st.success(f"Visualizing {len(file_names)} JSON files")
         st.image(img, channels="BGR", caption="Combined Visualization")
@@ -1501,4 +1504,189 @@ def load_boundary(boundary_json_path):
         import traceback
         st.error(traceback.format_exc())
         return None, None, None
+
+
+def process_cost_map(uploaded_image):
+    """
+    Generate a cost map from an uploaded floor plan image.
+    
+    Args:
+        uploaded_image: Streamlit UploadedFile object
+    
+    Returns:
+        Tuple: (cost_map, heatmap, cost_normalized) or (None, None, None) on failure
+    """
+    try:
+        from pipeline_cost_map import generate_cost_map, create_heatmap
+        
+        # Save uploaded image temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+            tmp_file.write(uploaded_image.getbuffer())
+            tmp_path = tmp_file.name
+        
+        # Generate cost map
+        cost_map, cost_normalized = generate_cost_map(tmp_path)
+        
+        if cost_map is None:
+            st.error("Failed to process image")
+            return None, None, None
+        
+        # Create heatmap visualization
+        heatmap = create_heatmap(cost_normalized)
+        
+        if heatmap is None:
+            st.error("Failed to create heatmap")
+            return None, None, None
+        
+        # Clean up temporary file
+        os.unlink(tmp_path)
+        
+        st.success("✅ Cost map generated successfully")
+        st.info(f"Cost range: {cost_map.min():.2f} to {cost_map.max():.2f}")
+        
+        return cost_map, heatmap, cost_normalized
+        
+    except Exception as e:
+        st.error(f"Error generating cost map: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None, None, None
+
+
+def process_cost_heuristic(uploaded_image):
+    """
+    Generate movement cost heuristic from an uploaded floor plan image.
+    Suitable for pre-computation for mobile/API use.
+    
+    Args:
+        uploaded_image: Streamlit UploadedFile object
+    
+    Returns:
+        Tuple: (cost_map_float32, metadata, heatmap) or (None, None, None) on failure
+    """
+    try:
+        from pipeline_cost_map import calculate_movement_cost_heuristic, create_heatmap_from_cost
+        
+        # Save uploaded image temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+            tmp_file.write(uploaded_image.getbuffer())
+            tmp_path = tmp_file.name
+        
+        # Generate movement cost heuristic (Kotlin-compatible formula)
+        cost_map, metadata = calculate_movement_cost_heuristic(tmp_path)
+        
+        if cost_map is None:
+            st.error("Failed to process image")
+            return None, None, None
+        
+        # Create heatmap visualization
+        heatmap = create_heatmap_from_cost(cost_map)
+        
+        if heatmap is None:
+            st.error("Failed to create heatmap")
+            return None, None, None
+        
+        # Clean up temporary file
+        os.unlink(tmp_path)
+        
+        st.success("✅ Cost heuristic generated successfully")
+        st.info(f"Movement cost range: {metadata['cost_min']:.2f} to {metadata['cost_max']:.2f}")
+        st.info(f"Image dimensions: {metadata['image_width']}x{metadata['image_height']}")
+        
+        return cost_map, metadata, heatmap
+        
+    except Exception as e:
+        st.error(f"Error generating cost heuristic: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None, None, None
+
+
+def save_cost_map(heatmap, floor_number):
+    """
+    Save the cost map heatmap to file.
+    
+    Args:
+        heatmap: The heatmap image
+        floor_number: Floor number for filename
+    
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        from pipeline_cost_map import save_cost_map as save_cost_map_file
+        
+        if not floor_number:
+            st.error("Please enter a floor number")
+            return False
+        
+        if heatmap is None:
+            st.error("No cost map generated yet")
+            return False
+        
+        success, result = save_cost_map_file(heatmap, floor_number)
+        
+        if success:
+            st.success(f"✅ Cost map saved to {result}")
+            return True
+        else:
+            st.error(f"Failed to save cost map: {result}")
+            return False
+        
+    except Exception as e:
+        st.error(f"Error saving cost map: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
+
+
+def save_cost_heuristic(cost_map_float32, metadata, floor_number):
+    """
+    Save the movement cost heuristic as PNG + JSON for mobile/API use.
+    
+    Generates two files:
+    1. floor_X_cost_heuristic.png - Pre-computed movement costs
+    2. floor_X_cost_heuristic.json - Metadata for decoding PNG values
+    
+    Args:
+        cost_map_float32: Float32 cost map from process_cost_heuristic()
+        metadata: Metadata dict from process_cost_heuristic()
+        floor_number: Floor number for filename
+    
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        from pipeline_cost_map import save_cost_heuristic as save_heuristic_file
+        
+        if not floor_number:
+            st.error("Please enter a floor number")
+            return False
+        
+        if cost_map_float32 is None or metadata is None:
+            st.error("No cost heuristic generated yet")
+            return False
+        
+        success, png_path, json_path = save_heuristic_file(cost_map_float32, metadata, floor_number)
+        
+        if success:
+            st.success(f"✅ Movement cost heuristic saved successfully!")
+            st.info(f"PNG (cost values): {png_path}")
+            st.info(f"JSON (metadata): {json_path}")
+            
+            # Display file info
+            with open(json_path, 'r') as f:
+                saved_metadata = json.load(f)
+            st.json(saved_metadata)
+            
+            return True
+        else:
+            st.error(f"Failed to save cost heuristic: {png_path}")
+            return False
+        
+    except Exception as e:
+        st.error(f"Error saving cost heuristic: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
 
