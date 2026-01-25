@@ -555,8 +555,8 @@ def render_visualize_view():
 
 
 def render_rooms_view():
-    """Render the rooms creation view."""
-    st.header("Create Rooms")
+    """Render the rooms creation/editing view."""
+    st.header("Create/Edit Rooms")
     
     st.subheader("Load Floor Plan")
     
@@ -572,87 +572,228 @@ def render_rooms_view():
         if custom_floor:
             floor_from_file = custom_floor
     
-    # Get walls JSON files
-    json_dir = "outputs"
-    json_files = _get_json_files(json_dir, filter_type="walls")
+    # Option to load existing rooms or create new
+    load_option = st.radio("Choose:", ["Create New Rooms", "Load Existing Rooms"], key="rooms_load_option")
     
-    # Auto-select walls file based on floor
-    selected_walls_file = None
-    if floor_from_file:
-        matching_files = [f for f in json_files if f"floor_{floor_from_file}_walls" in f]
-        if matching_files:
-            selected_walls_file = matching_files[0]
+    st.markdown("---")
     
-    # Manual file selection fallback
-    if not selected_walls_file:
-        st.subheader("Manually select walls JSON")
-        selected_walls_file = st.selectbox(
-            "Select walls JSON file",
+    if load_option == "Load Existing Rooms":
+        st.subheader("Load Existing Rooms File")
+        
+        json_dir = "outputs"
+        json_files = _get_json_files(json_dir, filter_type="_rooms")
+        
+        if not json_files:
+            st.warning("No rooms JSON files found")
+            return None, None, None, None, None, None, None, None, None, None, None, None, None
+        
+        rooms_file = st.selectbox(
+            "Select rooms file",
             json_files,
-            key="rooms_walls_select"
+            key="rooms_file_select"
         )
+        
+        rooms_json_path = f"{json_dir}/{rooms_file}" if rooms_file else None
+        
+        # Get walls file (for plotting)
+        json_files_walls = _get_json_files(json_dir, filter_type="_walls")
+        
+        # Auto-select walls file based on floor
+        selected_walls_file = None
+        if floor_from_file:
+            matching_files = [f for f in json_files_walls if f"floor_{floor_from_file}_walls" in f]
+            if matching_files:
+                selected_walls_file = matching_files[0]
+        
+        # Manual fallback
+        if not selected_walls_file and json_files_walls:
+            selected_walls_file = json_files_walls[0]
+        
+        if selected_walls_file:
+            st.success(f"✓ Using walls: {selected_walls_file}")
+            if st.checkbox("Change walls file", key="rooms_load_change_walls"):
+                selected_walls_file = st.selectbox(
+                    "Select walls file",
+                    json_files_walls,
+                    key="rooms_load_walls_select"
+                )
+        
+        walls_json_path = f"{json_dir}/{selected_walls_file}" if selected_walls_file else None
+        
+        load_rooms_button = st.button("Load Rooms for Editing", key="rooms_load_button")
+        
+        st.markdown("---")
+        st.subheader("Edit Rooms")
+        
+        if st.session_state.get('rooms_loaded_list'):
+            room_names = [r.get('name', f"Room {i}") for i, r in enumerate(st.session_state.rooms_loaded_list)]
+            
+            edit_col1, edit_col2, edit_col3 = st.columns([2, 1, 1])
+            with edit_col1:
+                current_room_idx = st.selectbox(
+                    "Select room to edit",
+                    range(len(room_names)),
+                    format_func=lambda i: room_names[i],
+                    key="rooms_edit_select"
+                )
+            
+            with edit_col2:
+                if st.button("🗑️ Delete", key="rooms_delete_button"):
+                    if current_room_idx < len(st.session_state.rooms_loaded_list):
+                        st.session_state.rooms_loaded_list.pop(current_room_idx)
+                        st.rerun()
+            
+            with edit_col3:
+                if st.button("➕ Add New", key="rooms_add_to_loaded"):
+                    st.session_state.rooms_loaded_list.append({
+                        'point1_id': 0,
+                        'point2_id': 0,
+                        'point3_id': 0,
+                        'point4_id': 0,
+                        'name': 'New Room'
+                    })
+                    st.session_state.rooms_add_new_flag = True
+                    st.rerun()
+            
+            st.markdown("---")
+            
+            # Show edit form for selected room
+            room = st.session_state.rooms_loaded_list[current_room_idx]
+            
+            st.write(f"**Editing: {room.get('name', 'Unnamed')} (Room {current_room_idx + 1}/{len(st.session_state.rooms_loaded_list)})**")
+            
+            edit_col1, edit_col2, edit_col3, edit_col4 = st.columns(4)
+            with edit_col1:
+                p1 = st.number_input(
+                    "Point 1 ID",
+                    value=int(room.get('point1_id', 0)),
+                    key=f"rooms_edit_p1_{current_room_idx}"
+                )
+                room['point1_id'] = p1
+            with edit_col2:
+                p2 = st.number_input(
+                    "Point 2 ID",
+                    value=int(room.get('point2_id', 0)),
+                    key=f"rooms_edit_p2_{current_room_idx}"
+                )
+                room['point2_id'] = p2
+            with edit_col3:
+                p3 = st.number_input(
+                    "Point 3 ID",
+                    value=int(room.get('point3_id', 0)),
+                    key=f"rooms_edit_p3_{current_room_idx}"
+                )
+                room['point3_id'] = p3
+            with edit_col4:
+                p4 = st.number_input(
+                    "Point 4 ID",
+                    value=int(room.get('point4_id', 0)),
+                    key=f"rooms_edit_p4_{current_room_idx}"
+                )
+                room['point4_id'] = p4
+            
+            room_name = st.text_input(
+                "Room name",
+                value=room.get('name', ''),
+                key=f"rooms_edit_name_{current_room_idx}"
+            )
+            room['name'] = room_name
+        else:
+            st.info("Load a rooms file first to edit or add rooms")
+            current_room_idx = 0
+        
+        plot_button = st.button("Plot Walls", key="rooms_load_plot_button")
+        save_button = st.button("Save Updated Rooms to JSON", key="rooms_load_save_button")
+        
+        # Return values for load mode
+        return walls_json_path, plot_button, None, None, None, None, None, None, save_button, rooms_json_path, load_rooms_button, current_room_idx, True  # True indicates load mode
+
+    
     else:
-        st.success(f"✓ Using: {selected_walls_file}")
-        if st.checkbox("Change walls file", key="rooms_change_walls"):
+        # Create new rooms mode (original code)
+        # Get walls JSON files
+        json_dir = "outputs"
+        json_files = _get_json_files(json_dir, filter_type="walls")
+        
+        # Auto-select walls file based on floor
+        selected_walls_file = None
+        if floor_from_file:
+            matching_files = [f for f in json_files if f"floor_{floor_from_file}_walls" in f]
+            if matching_files:
+                selected_walls_file = matching_files[0]
+        
+        # Manual file selection fallback
+        if not selected_walls_file:
+            st.subheader("Manually select walls JSON")
             selected_walls_file = st.selectbox(
                 "Select walls JSON file",
                 json_files,
-                key="rooms_walls_select_manual"
+                key="rooms_walls_select"
             )
-    
-    walls_json_path = f"{json_dir}/{selected_walls_file}" if selected_walls_file else None
-    
-    # Plot button
-    plot_button = st.button("Plot Walls", key="rooms_plot_button")
-    
-    st.markdown("---")
-    st.subheader("Define Rooms")
-    
-    # 4-point selection
-    st.write("Select 4 points to form a quadrilateral room:")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        point1_id = st.text_input("Point 1 ID", placeholder="e.g., 0", key="rooms_p1")
-    with col2:
-        point2_id = st.text_input("Point 2 ID", placeholder="e.g., 1", key="rooms_p2")
-    with col3:
-        point3_id = st.text_input("Point 3 ID", placeholder="e.g., 2", key="rooms_p3")
-    with col4:
-        point4_id = st.text_input("Point 4 ID", placeholder="e.g., 3", key="rooms_p4")
-    
-    # Room name and number
-    room_full_name = st.text_input(
-        "Room name (e.g., '114: Gents Toilet' or just 'Lift')",
-        placeholder="Format: number: name (optional)",
-        key="rooms_name"
-    )
-    
-    add_room_button = st.button("Add Room", key="rooms_add_button")
-    
-    st.markdown("---")
-    st.subheader("Pending Rooms")
-    
-    # Display pending rooms
-    if st.session_state.rooms_pending:
-        st.info(f"Total rooms to add: {len(st.session_state.rooms_pending)}")
+        else:
+            st.success(f"✓ Using: {selected_walls_file}")
+            if st.checkbox("Change walls file", key="rooms_change_walls"):
+                selected_walls_file = st.selectbox(
+                    "Select walls JSON file",
+                    json_files,
+                    key="rooms_walls_select_manual"
+                )
         
-        for idx, room in enumerate(st.session_state.rooms_pending):
-            col1, col2, col3 = st.columns([2, 2, 1])
-            with col1:
-                st.write(f"**{room.get('name', 'Unnamed')}**")
-            with col2:
-                point_ids = [room['point1_id'], room['point2_id'], room['point3_id'], room['point4_id']]
-                st.write(f"Points: {point_ids}")
-            with col3:
-                if st.button("✕", key=f"rooms_remove_{idx}"):
-                    st.session_state.rooms_pending.pop(idx)
-                    st.rerun()
-    
-    # Save button
-    save_button = st.button("Save Rooms to JSON", key="rooms_save_button")
-    
-    return walls_json_path, plot_button, point1_id, point2_id, point3_id, point4_id, room_full_name, add_room_button, save_button
+        walls_json_path = f"{json_dir}/{selected_walls_file}" if selected_walls_file else None
+        
+        # Plot button
+        plot_button = st.button("Plot Walls", key="rooms_plot_button")
+        
+        st.markdown("---")
+        st.subheader("Define Rooms")
+        
+        # 4-point selection
+        st.write("Select 4 points to form a quadrilateral room:")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            point1_id = st.text_input("Point 1 ID", placeholder="e.g., 0", key="rooms_p1")
+        with col2:
+            point2_id = st.text_input("Point 2 ID", placeholder="e.g., 1", key="rooms_p2")
+        with col3:
+            point3_id = st.text_input("Point 3 ID", placeholder="e.g., 2", key="rooms_p3")
+        with col4:
+            point4_id = st.text_input("Point 4 ID", placeholder="e.g., 3", key="rooms_p4")
+        
+        # Room name and number
+        room_full_name = st.text_input(
+            "Room name (e.g., '114: Gents Toilet' or just 'Lift')",
+            placeholder="Format: number: name (optional)",
+            key="rooms_name"
+        )
+        
+        add_room_button = st.button("Add Room", key="rooms_add_button")
+        
+        st.markdown("---")
+        st.subheader("Pending Rooms")
+        
+        # Display pending rooms
+        if st.session_state.rooms_pending:
+            st.info(f"Total rooms to add: {len(st.session_state.rooms_pending)}")
+            
+            for idx, room in enumerate(st.session_state.rooms_pending):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                with col1:
+                    st.write(f"**{room.get('name', 'Unnamed')}**")
+                with col2:
+                    point_ids = [room['point1_id'], room['point2_id'], room['point3_id'], room['point4_id']]
+                    st.write(f"Points: {point_ids}")
+                with col3:
+                    if st.button("✕", key=f"rooms_remove_{idx}"):
+                        st.session_state.rooms_pending.pop(idx)
+                        st.rerun()
+        
+        # Save button
+        save_button = st.button("Save Rooms to JSON", key="rooms_save_button")
+        
+        # Return values for create mode
+        return walls_json_path, plot_button, point1_id, point2_id, point3_id, point4_id, room_full_name, add_room_button, save_button, None, None, None, False  # False indicates create mode
+
 
 
 def render_match_view():

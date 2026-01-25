@@ -1098,6 +1098,159 @@ def save_rooms(floor_number, rooms_list, points_dict):
                 st.write(f"  • Room {room['id']}: {room_label} | Center: ({room['x']:.1f}, {room['y']:.1f}) | Points: {room['point_ids']}")
         
         return True
+    
+    except Exception as e:
+        st.error(f"Error saving rooms: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
+
+
+def load_rooms_file(rooms_json_path):
+    """
+    Load rooms from an existing JSON file for editing.
+    
+    Args:
+        rooms_json_path: Path to the rooms JSON file
+    
+    Returns:
+        List of room dicts or None on failure
+    """
+    try:
+        import json
+        
+        if not rooms_json_path or not os.path.exists(rooms_json_path):
+            st.error(f"Rooms file not found: {rooms_json_path}")
+            return None
+        
+        with open(rooms_json_path, 'r') as f:
+            data = json.load(f)
+        
+        # Handle both old format (list of rooms) and new format (dict with metadata)
+        if isinstance(data, list):
+            rooms_list = data
+        elif isinstance(data, dict) and 'rooms' in data:
+            rooms_list = data['rooms']
+        else:
+            st.error("Invalid rooms JSON format")
+            return None
+        
+        # Convert to editable format (ensure consistent structure)
+        editable_rooms = []
+        for room in rooms_list:
+            editable_rooms.append({
+                'point1_id': room['point_ids'][0] if len(room['point_ids']) > 0 else 0,
+                'point2_id': room['point_ids'][1] if len(room['point_ids']) > 1 else 0,
+                'point3_id': room['point_ids'][2] if len(room['point_ids']) > 2 else 0,
+                'point4_id': room['point_ids'][3] if len(room['point_ids']) > 3 else 0,
+                'name': f"{room['number']}: {room['name']}" if room['number'] else room['name']
+            })
+        
+        st.success(f"✅ Loaded {len(editable_rooms)} rooms from file")
+        return editable_rooms
+        
+    except Exception as e:
+        st.error(f"Error loading rooms file: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
+
+
+def save_rooms_from_loaded(floor_number, rooms_list, points_dict):
+    """
+    Save rooms that were loaded and edited from an existing file.
+    
+    Args:
+        floor_number: Floor number
+        rooms_list: List of edited room dicts
+        points_dict: Dict mapping point_id to (x, y) coordinates
+    
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        from pipeline_rooms import create_room_from_points, save_rooms_json
+        
+        if not floor_number or not rooms_list or not points_dict:
+            st.error("Missing floor number, rooms, or points")
+            return False
+        
+        # Convert points_dict format
+        points_numeric = {}
+        for point_id_str, coord in points_dict.items():
+            if point_id_str.startswith('P'):
+                numeric_id = point_id_str[1:]
+                points_numeric[numeric_id] = coord
+            else:
+                points_numeric[point_id_str] = coord
+        
+        # Create room objects from edited data
+        rooms = []
+        for idx, room_data in enumerate(rooms_list):
+            try:
+                point_ids = [
+                    room_data['point1_id'],
+                    room_data['point2_id'],
+                    room_data['point3_id'],
+                    room_data['point4_id']
+                ]
+                
+                # Create room using pipeline function
+                room = create_room_from_points(
+                    room_id=idx,
+                    point_ids=point_ids,
+                    points_dict=points_numeric,
+                    room_name=room_data['name']
+                )
+                
+                if room:
+                    rooms.append(room)
+                else:
+                    st.warning(f"Skipped room {idx}: {room_data['name']} - Invalid points")
+                    
+            except Exception as e:
+                st.warning(f"Skipped room {idx}: {str(e)}")
+                continue
+        
+        if not rooms:
+            st.error("No valid rooms to save")
+            return False
+        
+        # Format floor number
+        if isinstance(floor_number, str):
+            try:
+                floor_num = float(floor_number)
+            except ValueError:
+                floor_num = floor_number
+        else:
+            floor_num = float(floor_number)
+        
+        if isinstance(floor_num, float) and floor_num == int(floor_num):
+            floor_str = str(int(floor_num))
+        else:
+            floor_str = str(floor_num)
+        
+        # Save to file
+        output_file = f"outputs/floor_{floor_str}_rooms.json"
+        os.makedirs("outputs", exist_ok=True)
+        
+        save_rooms_json(rooms, output_file)
+        
+        st.success(f"✅ Saved {len(rooms)} updated rooms to {output_file}")
+        
+        with st.expander("📊 Updated Rooms Summary", expanded=True):
+            st.write(f"**Total rooms saved:** {len(rooms)}")
+            for room in rooms:
+                room_label = f"{room['number']}: {room['name']}" if room['number'] else room['name']
+                st.write(f"  • Room {room['id']}: {room_label} | Points: {room['point_ids']}")
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error saving rooms: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
         
     except Exception as e:
         st.error(f"Error saving rooms: {str(e)}")
